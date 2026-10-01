@@ -10,8 +10,10 @@
 # Si una variable no existe, se usa el valor que va después de ":-".
 # =============================================================================
 
-# Nombre fijo del proyecto. Así los contenedores y volúmenes se llaman siempre
+# Nombre del proyecto. Así los contenedores y volúmenes se llaman siempre
 # igual (odoo-local-...), aunque la carpeta del repositorio tenga otro nombre.
+# Si "odoo-local" ya lo usa otra instalación, odoo.sh guarda otro nombre
+# (odoo-local-2...) en COMPOSE_PROJECT_NAME dentro de .env, que tiene prioridad.
 name: odoo-local
 
 services:

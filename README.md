@@ -179,6 +179,8 @@ Una base de datos creada con una versión no se abre con otra.
 **Ya tengo otro Odoo instalado. ¿Se pisan?**
 No. Esta instalación es independiente:
 - Usa sus propios contenedores, volúmenes y red (todo empieza por `odoo-local`).
+  Si ya hay otra instalación con ese nombre en otra carpeta, `setup` y `start`
+  usan `odoo-local-2`, `odoo-local-3`... y lo guardan en `.env` (`COMPOSE_PROJECT_NAME`).
 - Su PostgreSQL no se publica en tu equipo: no choca con otro PostgreSQL ni con el puerto 5432.
 - Usa el puerto **8079**, no el 8069 habitual de Odoo. Así no le quita el puerto
   a tu otro Odoo, aunque esté apagado cuando instalas este.

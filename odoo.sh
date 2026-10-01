@@ -359,10 +359,69 @@ asegurar_puerto() {
 }
 
 # -----------------------------------------------------------------------------
+# proyecto_disponible
+# Qué hace:   dice si un nombre de proyecto de Docker Compose lo podemos usar
+#             desde esta carpeta. Docker guarda en cada contenedor la carpeta
+#             desde la que se creó; si hay contenedores de ese proyecto creados
+#             desde OTRA carpeta que todavía existe, el nombre es de otra
+#             instalación y no lo podemos usar.
+#             Si esa carpeta ya no existe (copia antigua borrada), los restos
+#             se consideran nuestros y se reutilizan.
+# Parámetros: $1 = nombre del proyecto (por ejemplo, odoo-local).
+# Ejemplo:    proyecto_disponible odoo-local && echo "libre o nuestro"
+# Por debajo: "docker ps -a" filtrando por la etiqueta
+#             com.docker.compose.project y leyendo
+#             com.docker.compose.project.working_dir.
+# -----------------------------------------------------------------------------
+proyecto_disponible() {
+  local aqui carpeta
+  aqui="$(pwd -P)"
+  while IFS= read -r carpeta; do
+    [ -n "$carpeta" ] || continue
+    [ -d "$carpeta" ] || continue
+    [ "$(cd "$carpeta" && pwd -P)" = "$aqui" ] && continue
+    return 1
+  done < <(docker ps -a --filter "label=com.docker.compose.project=$1" \
+             --format '{{.Label "com.docker.compose.project.working_dir"}}' | sort -u)
+  return 0
+}
+
+# -----------------------------------------------------------------------------
+# asegurar_proyecto
+# Qué hace:   evita mezclarse con otro proyecto de Docker que también se llame
+#             "odoo-local" (por ejemplo, una segunda copia de este repositorio
+#             en otra carpeta). Si el nombre está cogido, elige odoo-local-2,
+#             odoo-local-3... lo guarda en .env (COMPOSE_PROJECT_NAME) y avisa.
+#             Así cada instalación tiene sus propios contenedores y datos.
+# Parámetros: ninguno (usa y actualiza COMPOSE_PROJECT_NAME).
+# Ejemplo:    asegurar_proyecto
+# Por debajo: proyecto_disponible con cada nombre candidato. Docker Compose
+#             lee COMPOSE_PROJECT_NAME de .env y tiene prioridad sobre el
+#             "name:" de docker-compose.yml.
+# -----------------------------------------------------------------------------
+asegurar_proyecto() {
+  local actual="${COMPOSE_PROJECT_NAME:-odoo-local}" candidato="" n
+  proyecto_disponible "$actual" && return 0
+  for n in $(seq 2 20); do
+    if proyecto_disponible "odoo-local-$n"; then
+      candidato="odoo-local-$n"
+      break
+    fi
+  done
+  [ -n "$candidato" ] \
+    || error "Hay demasiadas instalaciones de odoo-local en este equipo. Pon un nombre propio en COMPOSE_PROJECT_NAME dentro de .env."
+  guardar_en_env COMPOSE_PROJECT_NAME "$candidato"
+  export COMPOSE_PROJECT_NAME="$candidato"
+  aviso "Ya hay otra instalación llamada '$actual' en otra carpeta. Esta se llamará '$candidato' (guardado en .env)."
+  aviso "Cada una tiene sus propios contenedores y datos: no se mezclan."
+}
+
+# -----------------------------------------------------------------------------
 # cmd_setup
 # Qué hace:   prepara todo para el primer uso: instala Docker si falta, crea .env
 #             desde .env.example si no existe, elige un puerto libre si el
-#             de ODOO_PORT está ocupado y descarga las imágenes.
+#             de ODOO_PORT está ocupado, un nombre de proyecto propio si
+#             "odoo-local" ya lo usa otra instalación y descarga las imágenes.
 # Parámetros: ninguno.
 # Ejemplo:    ./odoo.sh setup
 # Por debajo: "cp .env.example .env" y "docker compose pull".
@@ -373,6 +432,7 @@ cmd_setup() {
   ok "Docker está instalado y arrancado."
   crear_env
   cargar_env
+  asegurar_proyecto
   asegurar_puerto
   mkdir -p addons backups
   info "Descargando imágenes de Odoo y PostgreSQL (la primera vez puede tardar varios minutos)..."
@@ -394,6 +454,7 @@ cmd_start() {
   # Por si alguien ejecuta "start" sin haber hecho "setup".
   [ -f .env ] || crear_env
   cargar_env
+  asegurar_proyecto
   asegurar_puerto
   info "Arrancando contenedores..."
   docker compose up -d || error "No se pudieron arrancar los contenedores. Mira los detalles con: ./odoo.sh logs"
