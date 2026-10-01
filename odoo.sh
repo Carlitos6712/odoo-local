@@ -14,12 +14,16 @@
 # -o pipefail: un fallo en medio de una tubería (a | b) también cuenta como fallo.
 set -euo pipefail
 
-# Trabajamos siempre desde la carpeta del script, aunque se llame desde otro sitio,
-# para que docker compose encuentre docker-compose.yml y .env.
-cd "$(dirname "$0")"
-# Ruta absoluta del script: la usamos para volver a lanzarlo con el grupo
-# "docker" activo (ver comprobar_docker).
-SCRIPT="$(pwd)/$(basename "$0")"
+# Ruta real del script. "readlink -f" sigue los enlaces: así funciona también
+# el comando global "odoo-local" (un enlace en ~/.local/bin que crea install.sh).
+# La usamos para volver a lanzarlo con el grupo "docker" (ver comprobar_docker).
+SCRIPT="$(readlink -f "$0")"
+# Carpeta desde la que se llamó al script: sirve para entender rutas relativas
+# que escriba el usuario (por ejemplo, en "restore").
+DIR_LLAMADA="$PWD"
+# Trabajamos siempre desde la carpeta del proyecto, aunque se llame desde otro
+# sitio, para que docker compose encuentre docker-compose.yml y .env.
+cd "$(dirname "$SCRIPT")"
 ARGS=("$@")
 
 # Si ya somos root no hace falta "sudo"; si no, lo usamos para instalar cosas.
@@ -752,6 +756,75 @@ cmd_backup() {
 }
 
 # -----------------------------------------------------------------------------
+# cmd_restore
+# Qué hace:   restaura una copia hecha con "backup" como una base de datos
+#             nueva. Si junto al .dump está su _filestore.tar.gz, también
+#             restaura los adjuntos e imágenes. Nunca sobrescribe una base que
+#             ya exista.
+# Parámetros: $1 = archivo .dump (por ejemplo, backups/mi_empresa_2026-10-01_1530.dump)
+#             $2 = nombre de la base nueva (opcional; por defecto, el nombre
+#                  original sin la fecha: mi_empresa)
+# Ejemplo:    ./odoo.sh restore backups/mi_empresa_2026-10-01_1530.dump
+#             ./odoo.sh restore backups/mi_empresa_2026-10-01_1530.dump copia_pruebas
+# Por debajo: "docker compose cp" del archivo al contenedor db, "createdb" y
+#             "pg_restore"; para el filestore, "tar -x" dentro del contenedor odoo.
+# -----------------------------------------------------------------------------
+cmd_restore() {
+  local archivo="${1:-}"
+  [ -n "$archivo" ] || error "Uso: ./odoo.sh restore <archivo.dump> [nombre_base_nueva]   (tus copias están en backups/)"
+  # Una ruta relativa puede ser respecto al proyecto (backups/...) o respecto a
+  # la carpeta desde la que llamaste al comando.
+  if [ ! -f "$archivo" ] && [ -f "$DIR_LLAMADA/$archivo" ]; then archivo="$DIR_LLAMADA/$archivo"; fi
+  [ -f "$archivo" ] || error "No existe el archivo '$archivo'. Mira las copias disponibles con: ls backups/"
+  [[ "$archivo" == *.dump ]] || error "El archivo debe ser un .dump creado con ./odoo.sh backup"
+
+  # Nombre por defecto: quitamos la ruta, la extensión y la fecha del backup.
+  local base="${2:-}"
+  if [ -z "$base" ]; then
+    base="$(basename "$archivo" .dump)"
+    base="${base%_[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9][0-9][0-9]}"
+  fi
+  # Odoo solo acepta letras, números, "_", "." y "-" en el nombre de la base.
+  [[ "$base" =~ ^[A-Za-z0-9_.-]+$ ]] || error "Nombre de base no válido: '$base'. Usa letras, números, '_', '.' o '-'."
+
+  comprobar_docker
+  cargar_env
+  docker compose ps --status running --services 2>/dev/null | grep -qx db \
+    || error "La base de datos no está arrancada. Usa: ./odoo.sh start"
+  if [ -n "$(docker compose exec -T db psql -U "$DB_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$base'")" ]; then
+    error "Ya existe una base llamada '$base'. Elige otro nombre: ./odoo.sh restore $archivo ${base}_2"
+  fi
+
+  info "Restaurando '$archivo' en la base nueva '$base'..."
+  docker compose cp "$archivo" "db:/tmp/restore.dump" >/dev/null
+  docker compose exec -T db createdb -U "$DB_USER" "$base"
+  # --no-owner: la base queda a nombre del usuario de este Odoo (DB_USER),
+  # aunque la copia venga de otra instalación con otro usuario.
+  if ! docker compose exec -T db pg_restore -U "$DB_USER" -d "$base" --no-owner /tmp/restore.dump; then
+    docker compose exec -T db dropdb -U "$DB_USER" "$base" || true
+    error "No se pudo restaurar la copia (¿archivo dañado o de otra versión de PostgreSQL?). No se ha creado ninguna base."
+  fi
+  docker compose exec -T db rm -f /tmp/restore.dump
+  ok "Base de datos '$base' restaurada."
+
+  local filestore="${archivo%.dump}_filestore.tar.gz"
+  if [ -f "$filestore" ] && odoo_corriendo; then
+    docker compose cp "$filestore" "odoo:/tmp/restore_filestore.tar.gz" >/dev/null
+    # El .tar.gz guarda una carpeta con el nombre original de la base;
+    # --strip-components=1 la quita para guardar el contenido con el nombre nuevo.
+    docker compose exec -T odoo sh -c \
+      'mkdir -p "/var/lib/odoo/filestore/$1" && tar -xzf /tmp/restore_filestore.tar.gz -C "/var/lib/odoo/filestore/$1" --strip-components=1 && rm -f /tmp/restore_filestore.tar.gz' \
+      _ "$base"
+    ok "Adjuntos e imágenes restaurados."
+  elif [ -f "$filestore" ]; then
+    aviso "Odoo está apagado: no se restauraron los adjuntos. Arranca con ./odoo.sh start y repite con otro nombre."
+  else
+    aviso "No hay $filestore: se restauró solo la base de datos (sin adjuntos ni imágenes)."
+  fi
+  ok "Ábrela en http://localhost:${ODOO_PORT}/web?db=$base"
+}
+
+# -----------------------------------------------------------------------------
 # cmd_reset
 # Qué hace:   BORRA TODO: contenedores, bases de datos y filestore. No toca
 #             addons/ ni backups/. Pide confirmación escribiendo "si".
@@ -796,6 +869,7 @@ Uso: ./odoo.sh <comando> [argumentos]
   ${VERDE}update${RESET} <modulo> <base>    Actualiza un módulo de addons/ en una base de datos
   ${VERDE}new-module${RESET} <nombre>       Crea un módulo de ejemplo en addons/
   ${VERDE}backup${RESET} <base>             Guarda una copia de la base de datos en backups/
+  ${VERDE}restore${RESET} <archivo> [base]  Restaura una copia de backups/ como base nueva
   ${VERDE}reset${RESET}                     BORRA TODO (pide confirmación)
   ${VERDE}help${RESET}                      Muestra esta ayuda
 EOF
@@ -819,6 +893,7 @@ main() {
     update)     cmd_update "$@" ;;
     new-module) cmd_new_module "$@" ;;
     backup)     cmd_backup "$@" ;;
+    restore)    cmd_restore "$@" ;;
     reset)      cmd_reset ;;
     help|-h|--help) cmd_help ;;
     *) cmd_help; error "Comando desconocido: '$comando'" ;;
