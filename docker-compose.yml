@@ -10,8 +10,10 @@
 # Si una variable no existe, se usa el valor que va después de ":-".
 # =============================================================================
 
-# Nombre fijo del proyecto. Así los contenedores y volúmenes se llaman siempre
+# Nombre del proyecto. Así los contenedores y volúmenes se llaman siempre
 # igual (odoo-local-...), aunque la carpeta del repositorio tenga otro nombre.
+# Si "odoo-local" ya lo usa otra instalación, odoo.sh guarda otro nombre
+# (odoo-local-2...) en COMPOSE_PROJECT_NAME dentro de .env, que tiene prioridad.
 name: odoo-local
 
 services:
@@ -60,10 +62,12 @@ services:
       USER: ${DB_USER:-odoo}
       PASSWORD: ${DB_PASSWORD:-odoo}
     ports:
-      # Publica Odoo en http://localhost:ODOO_PORT.
+      # Publica Odoo en http://localhost:ODOO_PORT (por defecto 8079).
+      # No usamos el 8069 (el habitual de Odoo) para no quitárselo a otro Odoo
+      # que tengas instalado, aunque esté apagado al instalar este.
       # Se enlaza solo a 127.0.0.1 para que nadie de tu red pueda entrar
       # (el gestor de bases de datos de Odoo no debe quedar expuesto).
-      - "127.0.0.1:${ODOO_PORT:-8069}:8069"
+      - "127.0.0.1:${ODOO_PORT:-8079}:8069"
     volumes:
       # Filestore: adjuntos, imágenes y sesiones de Odoo. Debe persistir junto
       # con la base de datos; si se pierde uno de los dos, los datos quedan incompletos.

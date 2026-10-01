@@ -52,7 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/Carlitos6712/odoo-local/main/instal
 wget -qO- https://raw.githubusercontent.com/Carlitos6712/odoo-local/main/install.sh | bash
 ```
 
-Al terminar verás la URL de Odoo (normalmente **http://localhost:8069**). Ábrela en el navegador. ¡Listo!
+Al terminar verás la URL de Odoo (normalmente **http://localhost:8079**). Ábrela en el navegador. ¡Listo!
 
 Qué hace el instalador:
 1. Instala `git`, `curl`, Docker y Docker Compose si faltan. Te pide tu contraseña (`sudo`) y confirmación.
@@ -131,7 +131,7 @@ El modo desarrollador muestra opciones técnicas. Lo necesitas para trabajar con
 2. Baja hasta el final de la página.
 3. Pulsa **Activar el modo de desarrollador**.
 
-Atajo: añade `?debug=1` a la URL, por ejemplo `http://localhost:8069/odoo?debug=1`.
+Atajo: añade `?debug=1` a la URL, por ejemplo `http://localhost:8079/odoo?debug=1`.
 
 ## 5. Desarrollar un módulo
 
@@ -179,17 +179,21 @@ Una base de datos creada con una versión no se abre con otra.
 **Ya tengo otro Odoo instalado. ¿Se pisan?**
 No. Esta instalación es independiente:
 - Usa sus propios contenedores, volúmenes y red (todo empieza por `odoo-local`).
+  Si ya hay otra instalación con ese nombre en otra carpeta, `setup` y `start`
+  usan `odoo-local-2`, `odoo-local-3`... y lo guardan en `.env` (`COMPOSE_PROJECT_NAME`).
 - Su PostgreSQL no se publica en tu equipo: no choca con otro PostgreSQL ni con el puerto 5432.
-- Si el puerto 8069 está ocupado, `setup` y `start` eligen el siguiente libre (8070, 8071...),
+- Usa el puerto **8079**, no el 8069 habitual de Odoo. Así no le quita el puerto
+  a tu otro Odoo, aunque esté apagado cuando instalas este.
+- Si el 8079 también está ocupado, `setup` y `start` eligen el siguiente libre (8080, 8081...),
   lo guardan en `.env` y te muestran la URL correcta.
 - `reset` solo borra los datos de **esta** instalación.
 
-Un detalle: el navegador comparte la sesión entre `localhost:8069` y `localhost:8070`.
+Un detalle: el navegador comparte la sesión entre `localhost:8069` y `localhost:8079`.
 Si entras en los dos, uno te cierra la sesión del otro.
-Solución: abre este Odoo con `127.0.0.1` (por ejemplo, http://127.0.0.1:8070)
+Solución: abre este Odoo con `127.0.0.1` (por ejemplo, http://127.0.0.1:8079)
 y el otro con `localhost`. O usa una ventana privada.
 
-**"El puerto 8069 ya está ocupado"**
+**"El puerto ya está ocupado"**
 Los scripts lo resuelven solos eligiendo otro puerto (mira el aviso amarillo).
 Si quieres uno concreto, cambia `ODOO_PORT` en `.env` y ejecuta `start`.
 
@@ -235,7 +239,7 @@ y vuelve a ejecutar `./odoo.sh setup`: el resto funciona igual.
 
 ```
    Tu navegador
-        │  http://localhost:8069
+        │  http://localhost:8079
         ▼
 ┌─────────────────────────┐        ┌──────────────────────────┐
 │  Contenedor "odoo"      │        │  Contenedor "db"         │
