@@ -1,6 +1,6 @@
-# Odoo en local con Docker
+# Odoo en local con Docker (Linux)
 
-Instala, arranca y usa **Odoo 18** en tu ordenador con un solo comando por acción.
+Instala, arranca y usa **Odoo 18** en tu Linux desde la terminal, con un solo comando por acción.
 Pensado para quien nunca ha usado Odoo ni Docker.
 
 Autor: [@Carlitos6712](https://github.com/Carlitos6712) · Licencia MIT
@@ -16,32 +16,31 @@ También puedes crear tus propios módulos en Python.
 
 **Docker** ejecuta programas dentro de "contenedores".
 Piensa en un contenedor como una fiambrera: lleva dentro el programa y todo lo que necesita.
-No ensucia tu ordenador y funciona igual en Windows, macOS y Linux.
-Aquí usamos dos fiambreras: una con Odoo y otra con su base de datos (PostgreSQL).
+No ensucia tu sistema: Odoo y su base de datos no se instalan en tu Linux, viven en sus fiambreras.
+Aquí usamos dos: una con Odoo y otra con su base de datos (PostgreSQL).
 
 ## 2. Requisitos
 
-Solo necesitas **Docker Desktop** (incluye `docker compose`) y **Git**.
+- Un Linux basado en **Debian/Ubuntu** (también Mint, Pop!_OS, Zorin...), **Fedora**, **Arch** u **openSUSE**.
+- Un usuario con permiso de administrador (`sudo`).
+- **Git**, para descargar este proyecto.
 
-| Sistema | Cómo instalar Docker |
+No hace falta instalar Docker a mano: `./odoo.sh setup` lo instala si falta (te pregunta antes).
+
+**Abrir una terminal:** pulsa `Ctrl` + `Alt` + `T`, o busca "Terminal" en el menú de aplicaciones.
+
+**Instalar Git** (si `git --version` da error):
+
+| Distribución | Comando |
 |---|---|
-| Windows 10/11 | [Docker Desktop para Windows](https://docs.docker.com/desktop/setup/install/windows-install/). Acepta activar WSL 2 si lo pide y reinicia. |
-| macOS | [Docker Desktop para Mac](https://docs.docker.com/desktop/setup/install/mac-install/). Elige la versión de tu chip (Apple o Intel). |
-| Linux | [Docker Engine](https://docs.docker.com/engine/install/) o [Docker Desktop para Linux](https://docs.docker.com/desktop/setup/install/linux/). Después: `sudo usermod -aG docker $USER` y cierra sesión. |
-
-Git: [descargar Git](https://git-scm.com/downloads).
-
-Después de instalar, **abre Docker Desktop** y espera a que diga que está en marcha.
-
-**Solo en Windows**, la primera vez, permite ejecutar scripts. Abre PowerShell y ejecuta:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
+| Debian, Ubuntu, Mint... | `sudo apt install -y git` |
+| Fedora | `sudo dnf install -y git` |
+| Arch | `sudo pacman -S git` |
+| openSUSE | `sudo zypper install git` |
 
 ## 3. Inicio rápido
 
-**Linux / macOS** (Terminal):
+Copia y pega cada línea en la terminal:
 
 ```bash
 git clone https://github.com/Carlitos6712/odoo-local.git && cd odoo-local
@@ -49,23 +48,22 @@ git clone https://github.com/Carlitos6712/odoo-local.git && cd odoo-local
 ./odoo.sh start
 ```
 
-**Windows** (PowerShell):
+Abre en el navegador la URL que muestra `start` (normalmente **http://localhost:8069**). ¡Listo!
 
-```powershell
-git clone https://github.com/Carlitos6712/odoo-local.git; cd odoo-local
-.\odoo.ps1 setup
-.\odoo.ps1 start
-```
+Qué hace `setup` la primera vez:
+1. Instala `curl`, Docker y Docker Compose si faltan. Te pide tu contraseña (`sudo`).
+2. Arranca el servicio de Docker y lo deja activado al encender el equipo.
+3. Añade tu usuario al grupo `docker`, para no tener que escribir `sudo` cada vez.
+4. Crea el archivo `.env` con la configuración.
+5. Descarga Odoo y PostgreSQL (cerca de 1 GB; tarda unos minutos).
 
-Abre la URL que muestra `start` (normalmente **http://localhost:8069**). ¡Listo!
-
-> La primera vez, `setup` descarga cerca de 1 GB. Puede tardar unos minutos.
+> Al escribir la contraseña de `sudo` no se ve nada en pantalla. Es normal: escríbela y pulsa Enter.
 
 ## 4. Primer uso de Odoo
 
 ### 4.1. Crear la base de datos
 
-Al abrir http://localhost:8069 verás un formulario. Rellénalo así:
+Al abrir la URL verás un formulario. Rellénalo así:
 
 | Campo | Qué poner |
 |---|---|
@@ -86,7 +84,7 @@ Pulsa **Create database**. Tarda uno o dos minutos.
 
 ### 4.2. Iniciar sesión
 
-Odoo te deja dentro al terminar. Si no, entra en http://localhost:8069
+Odoo te deja dentro al terminar. Si no, entra en la URL de antes
 con el **Email** y la **Password** del paso anterior.
 
 ### 4.3. Instalar una app
@@ -125,26 +123,24 @@ Atajo: añade `?debug=1` a la URL, por ejemplo `http://localhost:8069/odoo?debug
    ./odoo.sh update biblioteca mi_empresa
    ```
 
-En Windows usa `.\odoo.ps1` en lugar de `./odoo.sh`.
-
 > Regla rápida: ¿cambiaste solo Python? `restart`. ¿Cambiaste campos, vistas o XML? `update`.
 
 ## 6. Referencia de comandos
 
-| Linux / macOS | Windows | Qué hace |
-|---|---|---|
-| `./odoo.sh setup` | `.\odoo.ps1 setup` | Comprueba Docker, crea `.env` y descarga las imágenes |
-| `./odoo.sh start` | `.\odoo.ps1 start` | Arranca Odoo y muestra la URL |
-| `./odoo.sh stop` | `.\odoo.ps1 stop` | Apaga Odoo sin borrar datos |
-| `./odoo.sh restart` | `.\odoo.ps1 restart` | Reinicia Odoo (tras cambiar código) |
-| `./odoo.sh status` | `.\odoo.ps1 status` | Muestra si los contenedores están corriendo |
-| `./odoo.sh logs` | `.\odoo.ps1 logs` | Logs en vivo (Ctrl+C para salir) |
-| `./odoo.sh shell` | `.\odoo.ps1 shell` | Terminal dentro del contenedor de Odoo |
-| `./odoo.sh update <modulo> <base>` | `.\odoo.ps1 update <modulo> <base>` | Actualiza un módulo en una base de datos |
-| `./odoo.sh new-module <nombre>` | `.\odoo.ps1 new-module <nombre>` | Crea un módulo de ejemplo en `addons/` |
-| `./odoo.sh backup <base>` | `.\odoo.ps1 backup <base>` | Copia la base de datos y sus archivos a `backups/` |
-| `./odoo.sh reset` | `.\odoo.ps1 reset` | **Borra todo** (pide escribir `si`) |
-| `./odoo.sh help` | `.\odoo.ps1 help` | Lista los comandos |
+| Comando | Qué hace |
+|---|---|
+| `./odoo.sh setup` | Instala Docker si falta, crea `.env` y descarga las imágenes |
+| `./odoo.sh start` | Arranca Odoo y muestra la URL |
+| `./odoo.sh stop` | Apaga Odoo sin borrar datos |
+| `./odoo.sh restart` | Reinicia Odoo (tras cambiar código) |
+| `./odoo.sh status` | Muestra si los contenedores están corriendo |
+| `./odoo.sh logs` | Logs en vivo (Ctrl+C para salir) |
+| `./odoo.sh shell` | Terminal dentro del contenedor de Odoo |
+| `./odoo.sh update <modulo> <base>` | Actualiza un módulo en una base de datos |
+| `./odoo.sh new-module <nombre>` | Crea un módulo de ejemplo en `addons/` |
+| `./odoo.sh backup <base>` | Copia la base de datos y sus archivos a `backups/` |
+| `./odoo.sh reset` | **Borra todo** (pide escribir `si`) |
+| `./odoo.sh help` | Lista los comandos |
 
 **Cambiar la versión de Odoo:** edita `ODOO_VERSION` en `.env`, ejecuta `setup` y luego `start`.
 Una base de datos creada con una versión no se abre con otra.
@@ -154,7 +150,7 @@ Una base de datos creada con una versión no se abre con otra.
 **Ya tengo otro Odoo instalado. ¿Se pisan?**
 No. Esta instalación es independiente:
 - Usa sus propios contenedores, volúmenes y red (todo empieza por `odoo-local`).
-- Su PostgreSQL no se publica en tu ordenador: no choca con otro PostgreSQL ni con el puerto 5432.
+- Su PostgreSQL no se publica en tu equipo: no choca con otro PostgreSQL ni con el puerto 5432.
 - Si el puerto 8069 está ocupado, `setup` y `start` eligen el siguiente libre (8070, 8071...),
   lo guardan en `.env` y te muestran la URL correcta.
 - `reset` solo borra los datos de **esta** instalación.
@@ -168,9 +164,18 @@ y el otro con `localhost`. O usa una ventana privada.
 Los scripts lo resuelven solos eligiendo otro puerto (mira el aviso amarillo).
 Si quieres uno concreto, cambia `ODOO_PORT` en `.env` y ejecuta `start`.
 
-**"Docker no está arrancado"**
-Abre Docker Desktop y espera a que diga que está en marcha. Repite el comando.
-En Linux sin Docker Desktop: `sudo systemctl start docker`.
+**"Docker está parado"**
+Arráncalo con `sudo systemctl start docker` y repite el comando.
+
+**"permission denied ... docker.sock"**
+Tu usuario no está en el grupo `docker`. Ejecuta `./odoo.sh setup`: lo arregla.
+Los scripts funcionan enseguida; para usar `docker` a mano sin `sudo`, cierra sesión y vuelve a entrar.
+
+**"Permission denied" al ejecutar `./odoo.sh`**
+El archivo perdió el permiso de ejecución. Ejecuta `chmod +x odoo.sh`.
+
+**Odoo no puede leer mi módulo**
+Los archivos de `addons/` deben poder leerse por todos. Ejecuta `chmod -R a+rX addons`.
 
 **Olvidé la contraseña**
 - *Master password:* mírala en `config/odoo.conf` (línea `admin_passwd`).
@@ -193,15 +198,9 @@ En Linux sin Docker Desktop: `sudo systemctl start docker`.
 4. Quita el filtro "Aplicaciones" del buscador y busca por nombre técnico.
 Si sigue sin salir, mira `./odoo.sh logs`: suele ser un error en `__manifest__.py`.
 
-**Permisos en Linux**
-- *"permission denied ... docker.sock":* tu usuario no está en el grupo `docker`.
-  Ejecuta `sudo usermod -aG docker $USER` y cierra sesión (o reinicia).
-- *Odoo no puede leer tu módulo:* los archivos de `addons/` deben poder leerse por todos.
-  Ejecuta `chmod -R a+rX addons`.
-- *"Permission denied" al ejecutar el script:* ejecuta `chmod +x odoo.sh`.
-
-**Windows: "la ejecución de scripts está deshabilitada"**
-Ejecuta una vez: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+**Mi distribución no está en la lista**
+`setup` no sabrá instalar Docker. Instálalo con la [guía oficial](https://docs.docker.com/engine/install/)
+y vuelve a ejecutar `./odoo.sh setup`: el resto funciona igual.
 
 ## 8. Cómo funciona por dentro
 

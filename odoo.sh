@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# odoo.sh - Gestiona Odoo en local con Docker (Linux y macOS)
+# odoo.sh - Instala y gestiona Odoo en local con Docker desde la terminal de Linux
 # Autor: @Carlitos6712 (https://github.com/Carlitos6712)
 # Licencia: MIT
 #
 # Uso:  ./odoo.sh <comando> [argumentos]
 #       ./odoo.sh help        -> lista todos los comandos
 #
-# El equivalente para Windows es odoo.ps1 (mismos comandos).
+# Probado en distribuciones basadas en Debian/Ubuntu, Fedora, Arch y openSUSE.
 # =============================================================================
 
 # -e: salir si un comando falla; -u: error si se usa una variable sin definir;
@@ -17,6 +17,13 @@ set -euo pipefail
 # Trabajamos siempre desde la carpeta del script, aunque se llame desde otro sitio,
 # para que docker compose encuentre docker-compose.yml y .env.
 cd "$(dirname "$0")"
+# Ruta absoluta del script: la usamos para volver a lanzarlo con el grupo
+# "docker" activo (ver comprobar_docker).
+SCRIPT="$(pwd)/$(basename "$0")"
+ARGS=("$@")
+
+# Si ya somos root no hace falta "sudo"; si no, lo usamos para instalar cosas.
+if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
 # -----------------------------------------------------------------------------
 # Colores y mensajes
@@ -56,29 +63,192 @@ cargar_env() {
 }
 
 # -----------------------------------------------------------------------------
+# confirmar
+# Qué hace:   hace una pregunta de sí/no. Devuelve éxito solo si la respuesta
+#             empieza por "s". Se usa antes de instalar nada en el sistema.
+# Parámetros: $1 = pregunta.
+# Ejemplo:    confirmar "¿Instalar Docker ahora?" && instalar_docker
+# Por debajo: "read" desde la terminal.
+# -----------------------------------------------------------------------------
+confirmar() {
+  local respuesta
+  read -r -p "$1 [s/n]: " respuesta
+  [[ "$respuesta" =~ ^[sS] ]]
+}
+
+# -----------------------------------------------------------------------------
+# gestor_paquetes
+# Qué hace:   detecta el gestor de paquetes de tu distribución.
+# Parámetros: ninguno.
+# Ejemplo:    gestor_paquetes   -> imprime "apt", "dnf", "pacman" o "zypper"
+# Por debajo: busca los comandos apt-get, dnf, pacman y zypper.
+# -----------------------------------------------------------------------------
+gestor_paquetes() {
+  local gestor
+  for gestor in apt-get dnf pacman zypper; do
+    if command -v "$gestor" >/dev/null 2>&1; then
+      printf '%s' "${gestor%-get}"
+      return 0
+    fi
+  done
+  printf 'desconocido'
+}
+
+# -----------------------------------------------------------------------------
+# instalar_paquetes
+# Qué hace:   instala paquetes del sistema con el gestor de tu distribución.
+# Parámetros: $@ = nombres de los paquetes.
+# Ejemplo:    instalar_paquetes curl git
+# Por debajo: "sudo apt-get install -y ...", "sudo dnf install -y ...", etc.
+# -----------------------------------------------------------------------------
+instalar_paquetes() {
+  case "$(gestor_paquetes)" in
+    apt)    $SUDO apt-get update && $SUDO apt-get install -y "$@" ;;
+    dnf)    $SUDO dnf install -y "$@" ;;
+    pacman) $SUDO pacman -S --needed --noconfirm "$@" ;;
+    zypper) $SUDO zypper --non-interactive install "$@" ;;
+    *)      error "No reconozco tu distribución. Instala a mano: $*" ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
+# instalar_docker
+# Qué hace:   instala Docker Engine y el plugin "docker compose" desde los
+#             repositorios oficiales (o los de tu distribución en Arch/openSUSE).
+# Parámetros: ninguno.
+# Ejemplo:    instalar_docker
+# Por debajo: en Debian/Ubuntu (y derivadas como Mint o Pop!_OS) añade el
+#             repositorio oficial de Docker siguiendo
+#             https://docs.docker.com/engine/install/ y hace "apt-get install".
+#             En Fedora/RHEL usa el script oficial https://get.docker.com.
+# -----------------------------------------------------------------------------
+instalar_docker() {
+  # /etc/os-release describe la distribución (ID, versión, nombre en clave...).
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  case "$(gestor_paquetes)" in
+    apt)
+      # Las derivadas de Ubuntu (Mint, Pop!_OS, Zorin...) indican en
+      # UBUNTU_CODENAME la versión de Ubuntu en la que se basan.
+      local base="debian" version="${VERSION_CODENAME:-}"
+      if [ -n "${UBUNTU_CODENAME:-}" ]; then base="ubuntu"; version="$UBUNTU_CODENAME"; fi
+      [ -n "$version" ] || error "No pude detectar la versión de tu distribución. Sigue https://docs.docker.com/engine/install/"
+      $SUDO apt-get update
+      $SUDO apt-get install -y ca-certificates curl
+      $SUDO install -m 0755 -d /etc/apt/keyrings
+      $SUDO curl -fsSL "https://download.docker.com/linux/$base/gpg" -o /etc/apt/keyrings/docker.asc
+      $SUDO chmod a+r /etc/apt/keyrings/docker.asc
+      printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
+        "$(dpkg --print-architecture)" "$base" "$version" | $SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
+      $SUDO apt-get update
+      $SUDO apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      ;;
+    dnf)
+      command -v curl >/dev/null 2>&1 || instalar_paquetes curl
+      curl -fsSL https://get.docker.com | $SUDO sh
+      ;;
+    pacman) instalar_paquetes docker docker-compose ;;
+    zypper) instalar_paquetes docker docker-compose ;;
+    *) error "No sé instalar Docker en tu distribución. Sigue https://docs.docker.com/engine/install/ y vuelve a ejecutar ./odoo.sh setup" ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
+# instalar_compose
+# Qué hace:   instala solo el plugin "docker compose" cuando Docker ya está
+#             instalado pero le falta (pasa con el paquete docker.io de Ubuntu).
+# Parámetros: ninguno.
+# Ejemplo:    instalar_compose
+# Por debajo: prueba los nombres de paquete habituales de cada distribución.
+# -----------------------------------------------------------------------------
+instalar_compose() {
+  case "$(gestor_paquetes)" in
+    apt) instalar_paquetes docker-compose-plugin || instalar_paquetes docker-compose-v2 ;;
+    dnf) instalar_paquetes docker-compose-plugin ;;
+    pacman|zypper) instalar_paquetes docker-compose ;;
+    *) error "Instala el plugin de Docker Compose: https://docs.docker.com/compose/install/linux/" ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
+# preparar_sistema
+# Qué hace:   deja Linux listo para usar Docker sin "sudo": instala curl,
+#             Docker y Compose si faltan (preguntando antes), arranca el
+#             servicio y añade tu usuario al grupo "docker". Solo lo usa setup.
+#             Se puede ejecutar varias veces: lo que ya está hecho se salta.
+# Parámetros: ninguno.
+# Ejemplo:    preparar_sistema
+# Por debajo: gestor de paquetes, "systemctl enable --now docker" y
+#             "usermod -aG docker $USER".
+# -----------------------------------------------------------------------------
+preparar_sistema() {
+  if ! command -v curl >/dev/null 2>&1; then
+    info "Falta curl (se usa para comprobar que Odoo responde). Instalando..."
+    instalar_paquetes curl
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    aviso "Docker no está instalado."
+    confirmar "¿Instalarlo ahora? Se pedirá tu contraseña de administrador (sudo)" \
+      || error "Sin Docker no se puede continuar. Guía oficial: https://docs.docker.com/engine/install/"
+    instalar_docker
+    ok "Docker instalado."
+  fi
+
+  if ! docker compose version >/dev/null 2>&1; then
+    aviso "Falta el plugin 'docker compose'."
+    confirmar "¿Instalarlo ahora?" || error "Sin 'docker compose' no se puede continuar."
+    instalar_compose
+    ok "Docker Compose instalado."
+  fi
+
+  # Arranca Docker y lo deja activado al encender el equipo.
+  if command -v systemctl >/dev/null 2>&1 && ! systemctl is-active --quiet docker; then
+    info "Arrancando el servicio de Docker..."
+    $SUDO systemctl enable --now docker || error "No se pudo arrancar Docker. Prueba: sudo systemctl status docker"
+  fi
+
+  # El grupo "docker" permite usar Docker sin escribir "sudo" cada vez.
+  # "id -nG USUARIO" lee los grupos guardados en el sistema (no los de esta sesión).
+  if [ "$(id -u)" -ne 0 ] && ! id -nG "$USER" | grep -qw docker; then
+    info "Añadiendo tu usuario al grupo 'docker' para no tener que usar sudo..."
+    $SUDO groupadd -f docker
+    $SUDO usermod -aG docker "$USER"
+    ok "Usuario '$USER' añadido al grupo 'docker'."
+  fi
+}
+
+# -----------------------------------------------------------------------------
 # comprobar_docker
 # Qué hace:   verifica que Docker y Docker Compose v2 están instalados y que
 #             Docker está arrancado. Si no, explica cómo arreglarlo y sale.
+#             Caso especial: si acabas de entrar al grupo "docker" pero tu
+#             sesión aún no lo sabe (hay que cerrar sesión para que se aplique),
+#             vuelve a lanzar el script con ese grupo activo para que funcione
+#             ya, sin reiniciar.
 # Parámetros: ninguno.
 # Ejemplo:    comprobar_docker
-# Por debajo: "docker --version", "docker compose version" y "docker info".
+# Por debajo: "docker compose version", "docker info" y, si hace falta,
+#             "sg docker -c ./odoo.sh ..." (ejecuta con el grupo docker).
 # -----------------------------------------------------------------------------
 comprobar_docker() {
-  if ! command -v docker >/dev/null 2>&1; then
-    error "Docker no está instalado. Instala Docker Desktop: https://docs.docker.com/get-docker/"
-  fi
-  if ! docker compose version >/dev/null 2>&1; then
-    error "Falta Docker Compose v2 (el comando 'docker compose'). Actualiza Docker Desktop o instala el plugin: https://docs.docker.com/compose/install/"
-  fi
+  command -v docker >/dev/null 2>&1 \
+    || error "Docker no está instalado. Ejecuta: ./odoo.sh setup"
+  docker compose version >/dev/null 2>&1 \
+    || error "Falta el plugin 'docker compose'. Ejecuta: ./odoo.sh setup"
   local salida
-  if ! salida="$(docker info 2>&1)"; then
-    # Distinguimos el caso típico de Linux: Docker funciona, pero tu usuario
-    # no tiene permiso para hablar con él.
-    if printf '%s' "$salida" | grep -qi "permission denied"; then
-      error "Tu usuario no tiene permiso para usar Docker. Ejecuta: sudo usermod -aG docker \$USER  y después cierra sesión y vuelve a entrar (o reinicia)."
+  salida="$(docker info 2>&1)" && return 0
+
+  if printf '%s' "$salida" | grep -qi "permission denied"; then
+    # ¿El usuario ya está en el grupo docker (en el sistema) pero no en esta
+    # sesión? Entonces relanzamos con "sg". ODOO_SH_SG evita repetirlo en bucle.
+    if [ -z "${ODOO_SH_SG:-}" ] && id -nG "$USER" | grep -qw docker && command -v sg >/dev/null 2>&1; then
+      export ODOO_SH_SG=1
+      exec sg docker -c "$(printf '%q ' "$SCRIPT" "${ARGS[@]}")"
     fi
-    error "Docker no está arrancado. Abre Docker Desktop (o en Linux: sudo systemctl start docker) y espera a que diga 'running'."
+    error "Tu usuario no tiene permiso para usar Docker. Ejecuta: ./odoo.sh setup  (o cierra sesión y vuelve a entrar si ya lo hiciste)."
   fi
+  error "Docker está parado. Arráncalo con: sudo systemctl start docker"
 }
 
 # -----------------------------------------------------------------------------
@@ -98,7 +268,7 @@ odoo_corriendo() {
 # Parámetros: $1 = número de puerto.
 # Ejemplo:    puerto_ocupado 8069 && echo "ocupado"
 # Por debajo: intenta abrir una conexión con /dev/tcp (incluido en bash,
-#             funciona igual en Linux y macOS sin instalar nada).
+#             no necesita instalar nada).
 # -----------------------------------------------------------------------------
 puerto_ocupado() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
@@ -152,7 +322,7 @@ crear_env() {
 # Parámetros: $1 = nombre de la variable, $2 = valor nuevo.
 # Ejemplo:    guardar_en_env ODOO_PORT 8070
 # Por debajo: reescribe .env con awk en un archivo temporal y lo renombra
-#             (así funciona igual en Linux y macOS, donde "sed -i" es distinto).
+#             (si algo falla a mitad, .env no queda a medio escribir).
 # -----------------------------------------------------------------------------
 guardar_en_env() {
   if grep -q "^$1=" .env; then
@@ -190,7 +360,7 @@ asegurar_puerto() {
 
 # -----------------------------------------------------------------------------
 # cmd_setup
-# Qué hace:   prepara todo para el primer uso: comprueba Docker, crea .env
+# Qué hace:   prepara todo para el primer uso: instala Docker si falta, crea .env
 #             desde .env.example si no existe, elige un puerto libre si el
 #             8069 está ocupado y descarga las imágenes.
 # Parámetros: ninguno.
@@ -198,6 +368,7 @@ asegurar_puerto() {
 # Por debajo: "cp .env.example .env" y "docker compose pull".
 # -----------------------------------------------------------------------------
 cmd_setup() {
+  preparar_sistema
   comprobar_docker
   ok "Docker está instalado y arrancado."
   crear_env
