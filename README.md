@@ -43,10 +43,14 @@ No hace falta instalar Docker a mano: `./odoo.sh setup` lo instala si falta (te 
 Copia y pega cada línea en la terminal:
 
 ```bash
-git clone https://github.com/Carlitos6712/odoo-local.git && cd odoo-local
+git clone https://github.com/Carlitos6712/odoo-local.git
+cd ~/odoo-local
 ./odoo.sh setup
 ./odoo.sh start
 ```
+
+> Si `git clone` dice que `odoo-local` ya existe, ya lo descargaste antes:
+> no lo repitas, sigue desde `cd ~/odoo-local`.
 
 Abre en el navegador la URL que muestra `start` (normalmente **http://localhost:8069**). ¡Listo!
 
