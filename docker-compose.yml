@@ -1,0 +1,81 @@
+# =============================================================================
+# docker-compose.yml - Odoo + PostgreSQL en local
+# Autor: @Carlitos6712 (https://github.com/Carlitos6712)
+#
+# Este archivo describe los dos "contenedores" que forman el entorno:
+#   - db:   la base de datos PostgreSQL, donde Odoo guarda toda la información.
+#   - odoo: el servidor de Odoo, que es la aplicación web que abres en el navegador.
+#
+# Las variables ${...} se leen del archivo .env (créalo con ./odoo.sh setup).
+# Si una variable no existe, se usa el valor que va después de ":-".
+# =============================================================================
+
+# Nombre fijo del proyecto. Así los contenedores y volúmenes se llaman siempre
+# igual (odoo-local-...), aunque la carpeta del repositorio tenga otro nombre.
+name: odoo-local
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Base de datos PostgreSQL
+  # ---------------------------------------------------------------------------
+  db:
+    # Imagen oficial de PostgreSQL. La versión se cambia en .env (POSTGRES_VERSION).
+    image: postgres:${POSTGRES_VERSION:-16}
+    environment:
+      # Usuario y contraseña que Odoo usará para conectarse a PostgreSQL.
+      # Solo sirven dentro de tu máquina: el puerto de la base de datos no se publica.
+      POSTGRES_USER: ${DB_USER:-odoo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-odoo}
+      # Base de datos inicial que crea PostgreSQL. Odoo crea las suyas aparte.
+      POSTGRES_DB: postgres
+    volumes:
+      # Volumen con nombre: los datos sobreviven aunque se borre el contenedor.
+      # Solo se pierden con "./odoo.sh reset".
+      - odoo-db-data:/var/lib/postgresql/data
+    healthcheck:
+      # Pregunta a PostgreSQL si ya acepta conexiones. Odoo no arranca hasta que
+      # esta comprobación sea correcta; así evitamos errores de "conexión rechazada".
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-odoo} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Servidor Odoo
+  # ---------------------------------------------------------------------------
+  odoo:
+    # Imagen oficial de Odoo. Para cambiar de versión, edita ODOO_VERSION en .env
+    # y ejecuta "./odoo.sh setup" para descargarla.
+    image: odoo:${ODOO_VERSION:-18}
+    depends_on:
+      db:
+        # Espera a que la base de datos esté lista (healthcheck correcto),
+        # no solo a que el contenedor exista.
+        condition: service_healthy
+    environment:
+      # La imagen oficial de Odoo lee estas variables para conectarse a PostgreSQL.
+      # "db" es el nombre del servicio de arriba: Docker lo resuelve como un nombre de red.
+      HOST: db
+      USER: ${DB_USER:-odoo}
+      PASSWORD: ${DB_PASSWORD:-odoo}
+    ports:
+      # Publica Odoo en http://localhost:ODOO_PORT.
+      # Se enlaza solo a 127.0.0.1 para que nadie de tu red pueda entrar
+      # (el gestor de bases de datos de Odoo no debe quedar expuesto).
+      - "127.0.0.1:${ODOO_PORT:-8069}:8069"
+    volumes:
+      # Filestore: adjuntos, imágenes y sesiones de Odoo. Debe persistir junto
+      # con la base de datos; si se pierde uno de los dos, los datos quedan incompletos.
+      - odoo-web-data:/var/lib/odoo
+      # Tus módulos propios. Cualquier cambio en ./addons se ve al instante
+      # dentro del contenedor (luego reinicia o actualiza el módulo).
+      - ./addons:/mnt/extra-addons
+      # Configuración de Odoo (config/odoo.conf). Editarla no requiere reconstruir nada.
+      - ./config:/etc/odoo
+
+# Volúmenes con nombre gestionados por Docker. Viven fuera de esta carpeta,
+# por eso no aparecen en el repositorio ni se suben a Git.
+volumes:
+  odoo-db-data:
+  odoo-web-data:

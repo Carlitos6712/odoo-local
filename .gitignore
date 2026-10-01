@@ -1,0 +1,15 @@
+# Variables locales con contraseñas: nunca se suben. Solo se versiona .env.example.
+.env
+
+# Copias de seguridad generadas con "backup": pueden contener datos reales.
+backups/
+
+# Archivos de Python compilados que genera Odoo al cargar módulos.
+__pycache__/
+*.pyc
+
+# Archivos de sistema y editores.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

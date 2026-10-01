@@ -1,0 +1,8 @@
+# Los scripts de bash deben tener saltos de línea LF; con CRLF (Windows)
+# fallan con errores como "bad interpreter". Git los fuerza a LF siempre.
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.conf text eol=lf
+
+# PowerShell en Windows trabaja mejor con CRLF.
+*.ps1  text eol=crlf
