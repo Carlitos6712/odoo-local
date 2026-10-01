@@ -40,7 +40,41 @@ No hace falta instalar Docker a mano: `./odoo.sh setup` lo instala si falta (te 
 
 ## 3. Inicio rápido
 
-Copia y pega cada línea en la terminal:
+Copia y pega **este único comando** en la terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Carlitos6712/odoo-local/main/install.sh | bash
+```
+
+¿Te dice `curl: orden no encontrada`? Usa este otro (hace lo mismo con `wget`):
+
+```bash
+wget -qO- https://raw.githubusercontent.com/Carlitos6712/odoo-local/main/install.sh | bash
+```
+
+Al terminar verás la URL de Odoo (normalmente **http://localhost:8069**). Ábrela en el navegador. ¡Listo!
+
+Qué hace el instalador:
+1. Instala `git`, `curl`, Docker y Docker Compose si faltan. Te pide tu contraseña (`sudo`) y confirmación.
+2. Descarga el proyecto en `~/odoo-local` (si ya estaba, lo actualiza).
+3. Arranca el servicio de Docker y lo deja activado al encender el equipo.
+4. Añade tu usuario al grupo `docker`, para no tener que escribir `sudo` cada vez.
+5. Crea el archivo `.env` con la configuración.
+6. Descarga Odoo y PostgreSQL (cerca de 1 GB; tarda unos minutos) y arranca Odoo.
+
+Puedes repetir el comando sin miedo: lo que ya está hecho se salta.
+
+Después, para el día a día, entra en la carpeta y usa `./odoo.sh` (mira la sección 6):
+
+```bash
+cd ~/odoo-local
+./odoo.sh help
+```
+
+> Al escribir la contraseña de `sudo` no se ve nada en pantalla. Es normal: escríbela y pulsa Enter.
+
+<details>
+<summary>Instalación manual, paso a paso (si prefieres no usar el instalador)</summary>
 
 ```bash
 git clone https://github.com/Carlitos6712/odoo-local.git
@@ -49,19 +83,10 @@ cd ~/odoo-local
 ./odoo.sh start
 ```
 
-> Si `git clone` dice que `odoo-local` ya existe, ya lo descargaste antes:
-> no lo repitas, sigue desde `cd ~/odoo-local`.
+Si `git clone` dice que `odoo-local` ya existe, ya lo descargaste antes:
+no lo repitas, sigue desde `cd ~/odoo-local`.
 
-Abre en el navegador la URL que muestra `start` (normalmente **http://localhost:8069**). ¡Listo!
-
-Qué hace `setup` la primera vez:
-1. Instala `curl`, Docker y Docker Compose si faltan. Te pide tu contraseña (`sudo`).
-2. Arranca el servicio de Docker y lo deja activado al encender el equipo.
-3. Añade tu usuario al grupo `docker`, para no tener que escribir `sudo` cada vez.
-4. Crea el archivo `.env` con la configuración.
-5. Descarga Odoo y PostgreSQL (cerca de 1 GB; tarda unos minutos).
-
-> Al escribir la contraseña de `sudo` no se ve nada en pantalla. Es normal: escríbela y pulsa Enter.
+</details>
 
 ## 4. Primer uso de Odoo
 
