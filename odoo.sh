@@ -58,7 +58,7 @@ cargar_env() {
     set +a
   fi
   # Valores por defecto por si .env no existe o le falta alguna variable.
-  ODOO_PORT="${ODOO_PORT:-8069}"
+  ODOO_PORT="${ODOO_PORT:-8079}"
   DB_USER="${DB_USER:-odoo}"
 }
 
@@ -266,7 +266,7 @@ odoo_corriendo() {
 # puerto_ocupado
 # Qué hace:   comprueba si algo ya escucha en un puerto local.
 # Parámetros: $1 = número de puerto.
-# Ejemplo:    puerto_ocupado 8069 && echo "ocupado"
+# Ejemplo:    puerto_ocupado 8079 && echo "ocupado"
 # Por debajo: intenta abrir una conexión con /dev/tcp (incluido en bash,
 #             no necesita instalar nada).
 # -----------------------------------------------------------------------------
@@ -320,7 +320,7 @@ crear_env() {
 # guardar_en_env
 # Qué hace:   cambia (o añade) una variable en .env sin tocar el resto del archivo.
 # Parámetros: $1 = nombre de la variable, $2 = valor nuevo.
-# Ejemplo:    guardar_en_env ODOO_PORT 8070
+# Ejemplo:    guardar_en_env ODOO_PORT 8080
 # Por debajo: reescribe .env con awk en un archivo temporal y lo renombra
 #             (si algo falla a mitad, .env no queda a medio escribir).
 # -----------------------------------------------------------------------------
@@ -362,7 +362,7 @@ asegurar_puerto() {
 # cmd_setup
 # Qué hace:   prepara todo para el primer uso: instala Docker si falta, crea .env
 #             desde .env.example si no existe, elige un puerto libre si el
-#             8069 está ocupado y descarga las imágenes.
+#             de ODOO_PORT está ocupado y descarga las imágenes.
 # Parámetros: ninguno.
 # Ejemplo:    ./odoo.sh setup
 # Por debajo: "cp .env.example .env" y "docker compose pull".
