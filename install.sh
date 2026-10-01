@@ -10,7 +10,8 @@
 # Qué hace:
 #   1. Instala git y curl si faltan.
 #   2. Descarga el proyecto en ~/odoo-local (o lo actualiza si ya existe).
-#   3. Ejecuta "./odoo.sh setup" (instala Docker si falta) y "./odoo.sh start".
+#   3. Crea el comando "odoo-local" para usarlo desde cualquier carpeta.
+#   4. Ejecuta "./odoo.sh setup" (instala Docker si falta) y "./odoo.sh start".
 #
 # Variables opcionales:
 #   ODOO_LOCAL_DIR   carpeta de instalación (por defecto: ~/odoo-local)
@@ -24,6 +25,10 @@ set -euo pipefail
 
 REPO="${ODOO_LOCAL_REPO:-https://github.com/Carlitos6712/odoo-local.git}"
 DESTINO="${ODOO_LOCAL_DIR:-$HOME/odoo-local}"
+# Dónde se crea el comando global "odoo-local" y qué archivo de la terminal
+# se usa para añadirlo al PATH (cambiables solo para pruebas).
+BIN_DIR="${ODOO_LOCAL_BIN:-$HOME/.local/bin}"
+RC_FILE="${ODOO_LOCAL_RC:-$HOME/.bashrc}"
 
 if [ -t 1 ]; then
   VERDE=$'\033[0;32m'; AMARILLO=$'\033[0;33m'; ROJO=$'\033[0;31m'; AZUL=$'\033[0;34m'; RESET=$'\033[0m'
@@ -87,6 +92,39 @@ descargar_proyecto() {
 }
 
 # -----------------------------------------------------------------------------
+# crear_comando_global
+# Qué hace:   crea el comando "odoo-local" para usar el proyecto desde cualquier
+#             carpeta (por ejemplo, "odoo-local start") sin hacer "cd" antes.
+#             Si ya existe otro programa con ese nombre, no lo toca.
+# Parámetros: ninguno (usa DESTINO, BIN_DIR y RC_FILE).
+# Ejemplo:    crear_comando_global
+# Por debajo: "ln -sfn" de odoo.sh en ~/.local/bin/odoo-local y, si esa
+#             carpeta no está en el PATH, añade una línea a ~/.bashrc.
+# -----------------------------------------------------------------------------
+crear_comando_global() {
+  local enlace="$BIN_DIR/odoo-local"
+  if [ -e "$enlace" ] && [ ! -L "$enlace" ]; then
+    aviso "Ya existe $enlace y no es de este proyecto: no se crea el comando 'odoo-local'."
+    return 0
+  fi
+  mkdir -p "$BIN_DIR"
+  ln -sfn "$DESTINO/odoo.sh" "$enlace"
+  ok "Comando 'odoo-local' disponible (por ejemplo: odoo-local status)."
+
+  # Ubuntu y Debian añaden ~/.local/bin al PATH al iniciar sesión, pero solo si
+  # la carpeta ya existía. Por si acaso, lo añadimos a .bashrc una sola vez.
+  case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *)
+      if ! grep -qs "# odoo-local: PATH" "$RC_FILE"; then
+        printf '\n# odoo-local: PATH\nexport PATH="%s:$PATH"\n' "$BIN_DIR" >> "$RC_FILE"
+      fi
+      aviso "Abre una terminal nueva para poder usar el comando 'odoo-local'."
+      ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
 # main
 # Qué hace:   ejecuta la instalación completa.
 # Parámetros: ninguno.
@@ -102,6 +140,7 @@ main() {
   instalar_si_falta curl
   instalar_si_falta git
   descargar_proyecto
+  crear_comando_global
   cd "$DESTINO"
 
   # Comprobamos que /dev/tty se puede abrir de verdad (no basta con que exista).
@@ -113,9 +152,8 @@ main() {
     ./odoo.sh start
   fi
 
-  ok "Instalación terminada. A partir de ahora, usa los comandos desde la carpeta del proyecto:"
-  info "  cd $DESTINO"
-  info "  ./odoo.sh help"
+  ok "Instalación terminada. A partir de ahora, desde cualquier carpeta:"
+  info "  odoo-local help      (o, dentro de $DESTINO: ./odoo.sh help)"
 }
 
 main "$@"

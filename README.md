@@ -57,19 +57,23 @@ Al terminar verás la URL de Odoo (normalmente **http://localhost:8079**). Ábre
 Qué hace el instalador:
 1. Instala `git`, `curl`, Docker y Docker Compose si faltan. Te pide tu contraseña (`sudo`) y confirmación.
 2. Descarga el proyecto en `~/odoo-local` (si ya estaba, lo actualiza).
-3. Arranca el servicio de Docker y lo deja activado al encender el equipo.
-4. Añade tu usuario al grupo `docker`, para no tener que escribir `sudo` cada vez.
-5. Crea el archivo `.env` con la configuración.
-6. Descarga Odoo y PostgreSQL (cerca de 1 GB; tarda unos minutos) y arranca Odoo.
+3. Crea el comando `odoo-local`, que funciona desde cualquier carpeta.
+4. Arranca el servicio de Docker y lo deja activado al encender el equipo.
+5. Añade tu usuario al grupo `docker`, para no tener que escribir `sudo` cada vez.
+6. Crea el archivo `.env` con la configuración.
+7. Descarga Odoo y PostgreSQL (cerca de 1 GB; tarda unos minutos) y arranca Odoo.
 
 Puedes repetir el comando sin miedo: lo que ya está hecho se salta.
 
-Después, para el día a día, entra en la carpeta y usa `./odoo.sh` (mira la sección 6):
+Después, para el día a día, abre una terminal **nueva** y usa `odoo-local` desde cualquier carpeta
+(mira la sección 6):
 
 ```bash
-cd ~/odoo-local
-./odoo.sh help
+odoo-local status
+odoo-local help
 ```
+
+`odoo-local <comando>` y `./odoo.sh <comando>` (dentro de `~/odoo-local`) hacen exactamente lo mismo.
 
 > Al escribir la contraseña de `sudo` no se ve nada en pantalla. Es normal: escríbela y pulsa Enter.
 
@@ -168,8 +172,23 @@ Atajo: añade `?debug=1` a la URL, por ejemplo `http://localhost:8079/odoo?debug
 | `./odoo.sh update <modulo> <base>` | Actualiza un módulo en una base de datos |
 | `./odoo.sh new-module <nombre>` | Crea un módulo de ejemplo en `addons/` |
 | `./odoo.sh backup <base>` | Copia la base de datos y sus archivos a `backups/` |
+| `./odoo.sh restore <archivo> [base]` | Restaura una copia de `backups/` como base nueva |
 | `./odoo.sh reset` | **Borra todo** (pide escribir `si`) |
 | `./odoo.sh help` | Lista los comandos |
+
+Si instalaste con el comando de una línea, cambia `./odoo.sh` por `odoo-local`
+y úsalo desde cualquier carpeta (por ejemplo, `odoo-local start`).
+
+**Copias de seguridad:**
+
+```bash
+./odoo.sh backup mi_empresa
+./odoo.sh restore backups/mi_empresa_2026-10-01_1530.dump
+```
+
+`restore` crea una base **nueva** con el nombre original (`mi_empresa`). Si ya existe,
+indica otro nombre al final: `./odoo.sh restore backups/mi_empresa_2026-10-01_1530.dump mi_empresa_copia`.
+Nunca sobrescribe una base que ya tengas.
 
 **Cambiar la versión de Odoo:** edita `ODOO_VERSION` en `.env`, ejecuta `setup` y luego `start`.
 Una base de datos creada con una versión no se abre con otra.
