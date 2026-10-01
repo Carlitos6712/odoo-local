@@ -129,9 +129,70 @@ esperar_odoo() {
 }
 
 # -----------------------------------------------------------------------------
+# crear_env
+# Qué hace:   crea .env copiando .env.example, solo si .env todavía no existe.
+#             Nunca sobrescribe un .env que ya tengas.
+# Parámetros: ninguno.
+# Ejemplo:    crear_env
+# Por debajo: "cp .env.example .env".
+# -----------------------------------------------------------------------------
+crear_env() {
+  if [ -f .env ]; then
+    ok ".env ya existe; se respeta tu configuración."
+    return 0
+  fi
+  [ -f .env.example ] || error "No encuentro .env.example. ¿Estás en la carpeta del repositorio?"
+  cp .env.example .env
+  ok ".env creado a partir de .env.example."
+}
+
+# -----------------------------------------------------------------------------
+# guardar_en_env
+# Qué hace:   cambia (o añade) una variable en .env sin tocar el resto del archivo.
+# Parámetros: $1 = nombre de la variable, $2 = valor nuevo.
+# Ejemplo:    guardar_en_env ODOO_PORT 8070
+# Por debajo: reescribe .env con awk en un archivo temporal y lo renombra
+#             (así funciona igual en Linux y macOS, donde "sed -i" es distinto).
+# -----------------------------------------------------------------------------
+guardar_en_env() {
+  if grep -q "^$1=" .env; then
+    awk -v clave="$1" -v valor="$2" 'index($0, clave "=") == 1 { $0 = clave "=" valor } { print }' .env > .env.tmp
+    mv .env.tmp .env
+  else
+    printf '%s=%s\n' "$1" "$2" >> .env
+  fi
+}
+
+# -----------------------------------------------------------------------------
+# asegurar_puerto
+# Qué hace:   si el puerto de .env lo usa OTRO programa (por ejemplo, otro Odoo
+#             que ya tengas instalado), busca el siguiente puerto libre, lo
+#             guarda en .env y avisa. Así las dos instalaciones conviven sin
+#             pisarse. Si el puerto lo usa este mismo Odoo, no hace nada.
+# Parámetros: ninguno (usa y actualiza ODOO_PORT).
+# Ejemplo:    asegurar_puerto
+# Por debajo: prueba puertos con /dev/tcp desde ODOO_PORT hasta ODOO_PORT+30.
+# -----------------------------------------------------------------------------
+asegurar_puerto() {
+  odoo_corriendo && return 0
+  puerto_ocupado "$ODOO_PORT" || return 0
+  local original="$ODOO_PORT" candidato=$((ODOO_PORT + 1)) limite=$((ODOO_PORT + 30))
+  while [ "$candidato" -le "$limite" ] && puerto_ocupado "$candidato"; do
+    candidato=$((candidato + 1))
+  done
+  [ "$candidato" -le "$limite" ] \
+    || error "Los puertos $original a $limite están ocupados. Cierra algún programa o pon un puerto libre en ODOO_PORT dentro de .env."
+  guardar_en_env ODOO_PORT "$candidato"
+  ODOO_PORT="$candidato"
+  aviso "El puerto $original ya lo usa otro programa (¿tienes otro Odoo?). Este Odoo usará el $candidato (guardado en .env)."
+  aviso "Ambos funcionan a la vez. Consejo: abre este en http://127.0.0.1:$candidato para que las sesiones no se mezclen."
+}
+
+# -----------------------------------------------------------------------------
 # cmd_setup
 # Qué hace:   prepara todo para el primer uso: comprueba Docker, crea .env
-#             desde .env.example si no existe y descarga las imágenes.
+#             desde .env.example si no existe, elige un puerto libre si el
+#             8069 está ocupado y descarga las imágenes.
 # Parámetros: ninguno.
 # Ejemplo:    ./odoo.sh setup
 # Por debajo: "cp .env.example .env" y "docker compose pull".
@@ -139,13 +200,9 @@ esperar_odoo() {
 cmd_setup() {
   comprobar_docker
   ok "Docker está instalado y arrancado."
-  if [ -f .env ]; then
-    ok ".env ya existe; no se modifica."
-  else
-    [ -f .env.example ] || error "No encuentro .env.example. ¿Estás en la carpeta del repositorio?"
-    cp .env.example .env
-    ok ".env creado a partir de .env.example."
-  fi
+  crear_env
+  cargar_env
+  asegurar_puerto
   mkdir -p addons backups
   info "Descargando imágenes de Odoo y PostgreSQL (la primera vez puede tardar varios minutos)..."
   docker compose pull || error "No se pudieron descargar las imágenes. Revisa tu conexión a Internet y que ODOO_VERSION/POSTGRES_VERSION en .env sean válidas."
@@ -155,19 +212,18 @@ cmd_setup() {
 # -----------------------------------------------------------------------------
 # cmd_start
 # Qué hace:   levanta Odoo y PostgreSQL en segundo plano, espera a que Odoo
-#             responda y muestra la URL.
+#             responda y muestra la URL. Si el puerto está ocupado por otro
+#             programa, elige uno libre automáticamente.
 # Parámetros: ninguno.
 # Ejemplo:    ./odoo.sh start
 # Por debajo: "docker compose up -d".
 # -----------------------------------------------------------------------------
 cmd_start() {
   comprobar_docker
+  # Por si alguien ejecuta "start" sin haber hecho "setup".
+  [ -f .env ] || crear_env
   cargar_env
-  [ -f .env ] || aviso "No existe .env; se usan valores por defecto. Ejecuta ./odoo.sh setup para crearlo."
-  # Si Odoo ya está corriendo, el puerto lo ocupa él mismo: no es un problema.
-  if ! odoo_corriendo && puerto_ocupado "$ODOO_PORT"; then
-    error "El puerto $ODOO_PORT ya está ocupado por otro programa (¿otro Odoo?). Ciérralo o cambia ODOO_PORT en .env (por ejemplo, 8070)."
-  fi
+  asegurar_puerto
   info "Arrancando contenedores..."
   docker compose up -d || error "No se pudieron arrancar los contenedores. Mira los detalles con: ./odoo.sh logs"
   if esperar_odoo; then

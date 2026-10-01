@@ -57,7 +57,7 @@ git clone https://github.com/Carlitos6712/odoo-local.git; cd odoo-local
 .\odoo.ps1 start
 ```
 
-Abre **http://localhost:8069** en el navegador. ¡Listo!
+Abre la URL que muestra `start` (normalmente **http://localhost:8069**). ¡Listo!
 
 > La primera vez, `setup` descarga cerca de 1 GB. Puede tardar unos minutos.
 
@@ -151,9 +151,22 @@ Una base de datos creada con una versión no se abre con otra.
 
 ## 7. Problemas frecuentes
 
+**Ya tengo otro Odoo instalado. ¿Se pisan?**
+No. Esta instalación es independiente:
+- Usa sus propios contenedores, volúmenes y red (todo empieza por `odoo-local`).
+- Su PostgreSQL no se publica en tu ordenador: no choca con otro PostgreSQL ni con el puerto 5432.
+- Si el puerto 8069 está ocupado, `setup` y `start` eligen el siguiente libre (8070, 8071...),
+  lo guardan en `.env` y te muestran la URL correcta.
+- `reset` solo borra los datos de **esta** instalación.
+
+Un detalle: el navegador comparte la sesión entre `localhost:8069` y `localhost:8070`.
+Si entras en los dos, uno te cierra la sesión del otro.
+Solución: abre este Odoo con `127.0.0.1` (por ejemplo, http://127.0.0.1:8070)
+y el otro con `localhost`. O usa una ventana privada.
+
 **"El puerto 8069 ya está ocupado"**
-Otro programa (a menudo otro Odoo) usa ese puerto.
-Ciérralo, o cambia `ODOO_PORT=8070` en `.env` y abre http://localhost:8070.
+Los scripts lo resuelven solos eligiendo otro puerto (mira el aviso amarillo).
+Si quieres uno concreto, cambia `ODOO_PORT` en `.env` y ejecuta `start`.
 
 **"Docker no está arrancado"**
 Abre Docker Desktop y espera a que diga que está en marcha. Repite el comando.

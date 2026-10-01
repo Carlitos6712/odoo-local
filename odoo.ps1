@@ -170,9 +170,76 @@ function Wait-Odoo ([string] $Puerto) {
 }
 
 # -----------------------------------------------------------------------------
+# New-Entorno
+# Qué hace:   crea .env copiando .env.example, solo si .env todavía no existe.
+#             Nunca sobrescribe un .env que ya tengas.
+# Parámetros: ninguno.
+# Ejemplo:    New-Entorno
+# Por debajo: "Copy-Item .env.example .env".
+# -----------------------------------------------------------------------------
+function New-Entorno {
+    if (Test-Path ".env") {
+        Write-Ok ".env ya existe; se respeta tu configuración."
+        return
+    }
+    if (-not (Test-Path ".env.example")) { Write-Fallo "No encuentro .env.example. ¿Estás en la carpeta del repositorio?" }
+    Copy-Item ".env.example" ".env"
+    Write-Ok ".env creado a partir de .env.example."
+}
+
+# -----------------------------------------------------------------------------
+# Set-ValorEntorno
+# Qué hace:   cambia (o añade) una variable en .env sin tocar el resto del archivo.
+# Parámetros: -Clave = nombre de la variable, -Valor = valor nuevo.
+# Ejemplo:    Set-ValorEntorno "ODOO_PORT" "8070"
+# Por debajo: lee .env, sustituye la línea "CLAVE=..." y lo guarda en UTF-8
+#             sin BOM (Docker Compose no espera BOM en .env).
+# -----------------------------------------------------------------------------
+function Set-ValorEntorno ([string] $Clave, [string] $Valor) {
+    $lineas = @(Get-Content ".env")
+    $encontrada = $false
+    for ($i = 0; $i -lt $lineas.Count; $i++) {
+        if ($lineas[$i].StartsWith("$Clave=")) {
+            $lineas[$i] = "$Clave=$Valor"
+            $encontrada = $true
+        }
+    }
+    if (-not $encontrada) { $lineas += "$Clave=$Valor" }
+    $ruta = Join-Path (Get-Location) ".env"
+    [System.IO.File]::WriteAllLines($ruta, [string[]] $lineas, (New-Object System.Text.UTF8Encoding $false))
+}
+
+# -----------------------------------------------------------------------------
+# Resolve-Puerto
+# Qué hace:   si el puerto de .env lo usa OTRO programa (por ejemplo, otro Odoo
+#             que ya tengas instalado), busca el siguiente puerto libre, lo
+#             guarda en .env y avisa. Así las dos instalaciones conviven sin
+#             pisarse. Si el puerto lo usa este mismo Odoo, no hace nada.
+# Parámetros: -Cfg = diccionario de Get-Entorno (se actualiza ODOO_PORT).
+# Ejemplo:    Resolve-Puerto $cfg
+# Por debajo: prueba conexiones TCP desde ODOO_PORT hasta ODOO_PORT+30.
+# -----------------------------------------------------------------------------
+function Resolve-Puerto ([hashtable] $Cfg) {
+    if (Test-ServicioCorriendo "odoo") { return }
+    $original = [int] $Cfg.ODOO_PORT
+    if (-not (Test-PuertoOcupado $original)) { return }
+    $limite = $original + 30
+    $candidato = $original + 1
+    while ($candidato -le $limite -and (Test-PuertoOcupado $candidato)) { $candidato++ }
+    if ($candidato -gt $limite) {
+        Write-Fallo "Los puertos $original a $limite están ocupados. Cierra algún programa o pon un puerto libre en ODOO_PORT dentro de .env."
+    }
+    Set-ValorEntorno "ODOO_PORT" "$candidato"
+    $Cfg.ODOO_PORT = "$candidato"
+    Write-Aviso "El puerto $original ya lo usa otro programa (¿tienes otro Odoo?). Este Odoo usará el $candidato (guardado en .env)."
+    Write-Aviso "Ambos funcionan a la vez. Consejo: abre este en http://127.0.0.1:$candidato para que las sesiones no se mezclen."
+}
+
+# -----------------------------------------------------------------------------
 # Invoke-Setup
 # Qué hace:   prepara todo para el primer uso: comprueba Docker, crea .env
-#             desde .env.example si no existe y descarga las imágenes.
+#             desde .env.example si no existe, elige un puerto libre si el
+#             8069 está ocupado y descarga las imágenes.
 # Parámetros: ninguno.
 # Ejemplo:    .\odoo.ps1 setup
 # Por debajo: "Copy-Item .env.example .env" y "docker compose pull".
@@ -180,13 +247,8 @@ function Wait-Odoo ([string] $Puerto) {
 function Invoke-Setup {
     Test-Docker
     Write-Ok "Docker está instalado y arrancado."
-    if (Test-Path ".env") {
-        Write-Ok ".env ya existe; no se modifica."
-    } else {
-        if (-not (Test-Path ".env.example")) { Write-Fallo "No encuentro .env.example. ¿Estás en la carpeta del repositorio?" }
-        Copy-Item ".env.example" ".env"
-        Write-Ok ".env creado a partir de .env.example."
-    }
+    New-Entorno
+    Resolve-Puerto (Get-Entorno)
     New-Item -ItemType Directory -Force -Path "addons", "backups" | Out-Null
     Write-Info "Descargando imágenes de Odoo y PostgreSQL (la primera vez puede tardar varios minutos)..."
     docker compose pull
@@ -197,19 +259,18 @@ function Invoke-Setup {
 # -----------------------------------------------------------------------------
 # Invoke-Start
 # Qué hace:   levanta Odoo y PostgreSQL en segundo plano, espera a que Odoo
-#             responda y muestra la URL.
+#             responda y muestra la URL. Si el puerto está ocupado por otro
+#             programa, elige uno libre automáticamente.
 # Parámetros: ninguno.
 # Ejemplo:    .\odoo.ps1 start
 # Por debajo: "docker compose up -d".
 # -----------------------------------------------------------------------------
 function Invoke-Start {
     Test-Docker
+    # Por si alguien ejecuta "start" sin haber hecho "setup".
+    if (-not (Test-Path ".env")) { New-Entorno }
     $cfg = Get-Entorno
-    if (-not (Test-Path ".env")) { Write-Aviso "No existe .env; se usan valores por defecto. Ejecuta .\odoo.ps1 setup para crearlo." }
-    # Si Odoo ya está corriendo, el puerto lo ocupa él mismo: no es un problema.
-    if (-not (Test-ServicioCorriendo "odoo") -and (Test-PuertoOcupado $cfg.ODOO_PORT)) {
-        Write-Fallo "El puerto $($cfg.ODOO_PORT) ya está ocupado por otro programa (¿otro Odoo?). Ciérralo o cambia ODOO_PORT en .env (por ejemplo, 8070)."
-    }
+    Resolve-Puerto $cfg
     Write-Info "Arrancando contenedores..."
     docker compose up -d
     Test-Exito "No se pudieron arrancar los contenedores. Mira los detalles con: .\odoo.ps1 logs"
