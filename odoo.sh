@@ -813,8 +813,11 @@ cmd_restore() {
     # El .tar.gz guarda una carpeta con el nombre original de la base;
     # --strip-components=1 la quita para guardar el contenido con el nombre nuevo.
     docker compose exec -T odoo sh -c \
-      'mkdir -p "/var/lib/odoo/filestore/$1" && tar -xzf /tmp/restore_filestore.tar.gz -C "/var/lib/odoo/filestore/$1" --strip-components=1 && rm -f /tmp/restore_filestore.tar.gz' \
+      'mkdir -p "/var/lib/odoo/filestore/$1" && tar -xzf /tmp/restore_filestore.tar.gz -C "/var/lib/odoo/filestore/$1" --strip-components=1' \
       _ "$base"
+    # "docker compose cp" deja el archivo a nombre de root: el usuario odoo
+    # no puede borrarlo de /tmp, así que lo borramos como root.
+    docker compose exec -T -u root odoo rm -f /tmp/restore_filestore.tar.gz
     ok "Adjuntos e imágenes restaurados."
   elif [ -f "$filestore" ]; then
     aviso "Odoo está apagado: no se restauraron los adjuntos. Arranca con ./odoo.sh start y repite con otro nombre."
