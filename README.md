@@ -23,20 +23,11 @@ Aquí usamos dos: una con Odoo y otra con su base de datos (PostgreSQL).
 
 - Un Linux basado en **Debian/Ubuntu** (también Mint, Pop!_OS, Zorin...), **Fedora**, **Arch** u **openSUSE**.
 - Un usuario con permiso de administrador (`sudo`).
-- **Git**, para descargar este proyecto.
+- `curl` o `wget`, para descargar el instalador (casi todas las distribuciones traen uno de los dos).
 
-No hace falta instalar Docker a mano: `./odoo.sh setup` lo instala si falta (te pregunta antes).
+No hace falta instalar Git ni Docker a mano: el instalador los instala si faltan (antes de instalar Docker te pide confirmación).
 
 **Abrir una terminal:** pulsa `Ctrl` + `Alt` + `T`, o busca "Terminal" en el menú de aplicaciones.
-
-**Instalar Git** (si `git --version` da error):
-
-| Distribución | Comando |
-|---|---|
-| Debian, Ubuntu, Mint... | `sudo apt install -y git` |
-| Fedora | `sudo dnf install -y git` |
-| Arch | `sudo pacman -S git` |
-| openSUSE | `sudo zypper install git` |
 
 ## 3. Inicio rápido
 
@@ -79,6 +70,15 @@ odoo-local help
 
 <details>
 <summary>Instalación manual, paso a paso (si prefieres no usar el instalador)</summary>
+
+La instalación manual sí necesita **Git**. Instálalo si `git --version` da error:
+
+| Distribución | Comando |
+|---|---|
+| Debian, Ubuntu, Mint... | `sudo apt install -y git` |
+| Fedora | `sudo dnf install -y git` |
+| Arch | `sudo pacman -S git` |
+| openSUSE | `sudo zypper install git` |
 
 ```bash
 git clone https://github.com/Carlitos6712/odoo-local.git
